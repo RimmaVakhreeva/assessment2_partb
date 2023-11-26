@@ -1,85 +1,142 @@
-import random
 import math
+import random
+import unittest
+from typing import List
+
 import matplotlib.pyplot as plt
 
-import numpy as np
-from scipy import stats
 
-#Generate random data
-def generate_random_data(num_points):
-    return [random.gauss(0, 1) for _ in range(num_points)]
+def generate_random_data(num_points: int) -> List[float]:
+    """
+    Generate a list of random data points following a gamma distribution.
+
+    Args:
+        num_points (int): The number of data points to generate.
+
+    Returns:
+        List[float]: A list of randomly generated data points.
+    """
+    # Generate random data points from a gamma distribution with shape=100 and scale=2
+    return [random.gammavariate(100, 2) for _ in range(num_points)]
 
 
-def calculate_mean(data):
-    return sum(data) / len(data)
+def empirical_distribution_function(data: List[float], x: float) -> float:
+    """
+    Calculate the empirical distribution function (EDF) for a given dataset at a specific point.
 
+    Args:
+        data (List[float]): The dataset for which to calculate the EDF.
+        x (float): The point at which to calculate the EDF.
 
-def calculate_std_dev(data, mean_value):
-    return math.sqrt(sum((x - mean_value) ** 2 for x in data) / len(data))
-
-
-# Calculate the Empirical Distribution Function
-def empirical_distribution_function(data, x):
-    sorted_data = sorted(data)
+    Returns:
+        float: The value of the empirical distribution function at the given point.
+    """
+    # Calculate the proportion of data points less than or equal to x
     n = len(data)
-    # Counts how many data points are less than or equal to x
-    return sum(value <= x for value in sorted_data) / n
+    return sum(value <= x for value in data) / n
 
 
-# Approximate the Cumulative Distribution Function of the Normal Distribution
-def phi(x, mu, sigma):
-    return (1 + math.erf((x - mu) / (sigma * math.sqrt(2)))) / 2
+def theoretical_distribution_function(x: float, mean: float, std_dev: float) -> float:
+    """
+    Calculate the theoretical cumulative distribution function (CDF) for a normal distribution.
+
+    Args:
+        x (float): The point at which to evaluate the CDF.
+        mean (float): The mean of the normal distribution.
+        std_dev (float): The standard deviation of the normal distribution.
+
+    Returns:
+        float: The value of the CDF at the given point.
+    """
+    # Compute the theoretical CDF of the normal distribution at point x
+    return (1 + math.erf((x - mean) / (std_dev * math.sqrt(2)))) / 2
 
 
-#Apply the Kolmogorov Test
-def kolmogorov_test(data, mu, sigma):
-    d_max = max(abs(empirical_distribution_function(data, x)) - phi(x, mu, sigma) for x in data)
+def kolmogorov_statistic(data: List[float], critical_value: float = 1.36, alpha: float = 0.05) -> float:
+    """
+    Calculate and print the Kolmogorov-Smirnov statistic for a given dataset.
+
+    Args:
+        data (List[float]): The dataset to analyze.
+        critical_value (float): The critical value for the Kolmogorov-Smirnov test.
+        alpha (float): The significance level.
+
+    Returns:
+        float: The Kolmogorov-Smirnov statistic for the given data.
+    """
+    # Calculate the mean and standard deviation of the data
+    n = len(data)
+    mean = sum(data) / len(data)
+    std_dev = math.sqrt(sum((x - mean) ** 2 for x in data) / len(data))
+
+    # Sort the data
+    sorted_data = sorted(data)
+
+    # Calculate the Kolmogorov-Smirnov statistic
+    d_max = max(
+        abs(empirical_distribution_function(sorted_data, x) - theoretical_distribution_function(x, mean, std_dev)) for x
+        in sorted_data)
+    print(f'Kolmogorov statistic: {round(d_max, 3)}')
+
+    d = round(d_max * math.sqrt(len(data)), 3)
+    critical_value = critical_value / math.sqrt(n)
+
+    # Compare the statistic with the critical value and print the result
+    if d < critical_value:
+        print(f'Data looks normal (fail to reject H_0), critical_value = {critical_value},  d = {d}')
+        print('d is less than the critical value')
+    else:
+        print(f'Data does not look normal (reject H_0), critical_value = {critical_value},  d = {d}')
+        print('d is greater than the critical value')
+
     return d_max
 
 
-# Creating the histogram
-def visualize_data(data):
-    plt.hist(data, bins=20, edgecolor='black')  # Adjust the number of bins as needed
+def visualize_data(data: List[float]):
+    """
+    Visualize the given data using a histogram.
 
-    # Adding titles and labels
+    Args:
+        data (List[float]): The data to visualize.
+    """
+    # Plot a histogram of the data
+    plt.hist(data, bins=20, edgecolor='black')
     plt.title('Histogram of Generated Data')
     plt.xlabel('Value')
     plt.ylabel('Frequency')
-
-    # Show the plot
-    return plt.show()
+    plt.show()
 
 
-# Generating 1000 random data points
-data = generate_random_data(1000)
+class TestNormalDistribution(unittest.TestCase):
+    """A suite of unit tests for verifying the normal distribution analysis functions."""
 
-# Calculate mean and standard deviation of the sample
-sample_mean = calculate_mean(data)
-sample_std_dev = calculate_std_dev(data, sample_mean)
+    def test_generate_random_data(self):
+        """Test the generate_random_data function for correct output length."""
+        num_points = 100
+        data = generate_random_data(num_points)
+        self.assertEqual(len(data), num_points)
 
+    def test_kolmogorov_statistic(self):
+        """
+        Test the kolmogorov_statistic function by comparing its output with the scipy implementation.
+        """
+        import numpy as np
+        from scipy import stats
 
-# Calculate Kolmogorov test
+        data = generate_random_data(1000)
 
-d_max = kolmogorov_test(data, sample_mean, sample_std_dev)
-print(f'Kolmogorov statistic: {round(d_max, 4)}')
+        # Calculate the Kolmogorov statistic for the generated data
+        d_max = kolmogorov_statistic(data)
 
-# Interpret the results
-
-alpha = 0.05 # significance level
-critical_value = 1.36
-
-d = round(d_max * math.sqrt(len(data)), 4)
-
-if d < critical_value:
-    print(f'Data looks normal (fail to reject H_0), critical_value is {critical_value},  d is {d}')
-else:
-    print(f'Data does not look normal (reject H_0), critical_value is {critical_value},  d is {d}')
-
-visualize_data(data)
+        # Use scipy's implementation of the Kolmogorov-Smirnov test for comparison
+        scipy_ks_statistic = stats.kstest(data, 'norm', args=(np.mean(data), np.std(data, ddof=1)))
+        print(f'scipy_ks_statistic: {round(scipy_ks_statistic.statistic, 3)}')
 
 
-# Perform the Kolmogorov-Smirnov test using libraries
-ks_statistic, p_value = stats.kstest(data, 'norm', args=(np.mean(data), np.std(data, ddof=1)))
+        # Assert that the calculated Kolmogorov statistic is approximately equal to scipy's result
+        self.assertAlmostEqual(round(d_max, 3), round(scipy_ks_statistic.statistic, 3), places=2, msg='Test failed')
 
-print(f"KS Statistic: {ks_statistic}")
-print(f"P-Value: {p_value}")
+
+if __name__ == "__main__":
+    # Run the unittests when the script is executed
+    unittest.main()
